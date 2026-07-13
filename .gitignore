@@ -9,3 +9,13 @@ plugin/
 .claude/
 .venv/
 .venv314/
+docs/awards-img/
+*.zip
+conftest.py
+start*.bat
+setup.bat
+setup.sh
+vm.sh
+一键启动.bat
+start_api.bat
+start_bot.bat
