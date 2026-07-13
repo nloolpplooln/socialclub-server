@@ -19,3 +19,6 @@ vm.sh
 一键启动.bat
 start_api.bat
 start_bot.bat
+samples/
+scripts/
+pack.py
