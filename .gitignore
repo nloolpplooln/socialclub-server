@@ -1,0 +1,9 @@
+.venv314/
+*.db
+cookie.txt
+.env
+__pycache__/
+*.pyc
+data/
+plugin/
+.claude/

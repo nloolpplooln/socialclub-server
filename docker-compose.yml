@@ -1,0 +1,13 @@
+services:
+  gta-api:
+    build: .
+    container_name: gta-api-server
+    ports:
+      - "8686:8686"
+    volumes:
+      - ./data:/app/data
+      - ./cookie.txt:/app/cookie.txt:ro
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      - DB_PATH=/app/data/gta_api.db

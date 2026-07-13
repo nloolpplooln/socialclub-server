@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTA 玩家查询</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Microsoft YaHei',sans-serif;background:#1a1a2e;color:#eee;min-height:100vh}
+.header{background:#16213e;padding:20px;text-align:center;border-bottom:2px solid #0f3460}
+.header h1{font-size:1.5em;color:#e94560}
+.search-box{max-width:600px;margin:30px auto;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.search-box input{flex:1;min-width:200px;padding:12px 18px;font-size:1.1em;border:none;border-radius:8px;background:#16213e;color:#eee;outline:none;border:2px solid #0f3460;transition:border .2s}
+.search-box input:focus{border-color:#e94560}
+.search-box button{padding:12px 20px;font-size:1em;border:none;border-radius:8px;background:#e94560;color:#fff;cursor:pointer;font-weight:bold}
+.search-box button:hover{background:#c73650}
+.search-box button:disabled{opacity:.5}
+.tabs{max-width:600px;margin:0 auto 20px;padding:0 20px;display:flex;gap:0}
+.tab{padding:10px 24px;border:none;background:#16213e;color:#8899aa;cursor:pointer;font-size:.95em;border-radius:8px 8px 0 0;border-bottom:2px solid transparent}
+.tab.active{color:#e94560;border-bottom-color:#e94560}
+.result{max-width:900px;margin:0 auto;padding:0 20px 40px}
+.card{background:#16213e;border-radius:10px;padding:20px;margin-bottom:16px;border:1px solid #0f3460}
+.card h2{color:#e94560;font-size:1.1em;margin-bottom:12px;border-bottom:1px solid #0f3460;padding-bottom:8px}
+.row{display:flex;padding:5px 0;border-bottom:1px solid #0f346020}
+.row .label{color:#8899aa;width:140px;flex-shrink:0;font-size:.9em}
+.row .value{color:#eee;font-size:.9em}
+.tag{display:inline-block;background:#0f3460;color:#e94560;padding:2px 8px;border-radius:4px;margin:2px 4px;font-size:.85em}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px}
+.cat-bar{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #0f346020}
+.cat-bar .bar-wrap{flex:1;height:16px;background:#0f3460;border-radius:4px;margin:0 8px;overflow:hidden}
+.cat-bar .bar-fill{height:100%;background:#e94560;border-radius:4px;transition:width .3s}
+.cat-bar .name{width:120px;font-size:.85em;color:#ccc}
+.cat-bar .num{font-size:.8em;color:#8899aa;width:60px;text-align:right}
+.award-item{display:flex;padding:3px 8px;border-bottom:1px solid #0f346015;font-size:.85em;align-items:center}
+.award-item .a-name{flex:1;color:#ccc}
+.award-item .a-medal{width:32px;text-align:center;font-size:.8em}
+.award-item .a-progress{width:80px;text-align:right;color:#8899aa}
+.award-item .a-bar{flex:1;height:12px;background:#0f3460;border-radius:3px;margin:0 8px;overflow:hidden;max-width:120px}
+.award-item .a-bar-fill{height:100%;border-radius:3px}
+.award-item.done .a-bar-fill{background:#4caf50}
+.category-section{margin-top:8px}
+.cat-header{color:#e94560;font-size:.9em;padding:6px 0;cursor:pointer;display:flex;justify-content:space-between}
+.cat-header:hover{opacity:.8}
+.cat-header .arrow{transition:transform .2s}
+.cat-header.open .arrow{transform:rotate(90deg)}
+.sub-items{margin-left:8px}
+.judge{background:#2a1a1a;border:1px solid #e9456050;border-radius:8px;padding:12px;margin-top:12px}
+.judge h3{color:#e94560;font-size:.9em;margin-bottom:6px}
+.judge .j-item{padding:3px 0;font-size:.85em}
+.judge .j-anomaly{color:#ff6b6b}
+.judge .j-suspect{color:#ffa500}
+.empty{color:#8899aa;padding:20px;text-align:center}
+.loading{text-align:center;padding:40px;color:#8899aa}
+.error{background:#3e1015;border:1px solid #e94560;color:#f88;padding:16px;border-radius:8px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>GTA Online 玩家查询</h1>
+  <p style="color:#8899aa;font-size:.85em"><span id="tokenStatus" style="color:#8899aa">检测中…</span></p>
+</div>
+<div class="search-box">
+  <input type="text" id="nickname" placeholder="输入玩家昵称" autofocus>
+  <button id="btn" onclick="doSearch()">查询</button>
+  <button id="btnForce" onclick="doSearch(true)" style="background:#0f3460;font-size:.85em">强制刷新</button>
+</div>
+<div class="tabs">
+  <button class="tab active" id="tabCareer" onclick="switchTab('career')">生涯</button>
+  <button class="tab" id="tabAwards" onclick="switchTab('awards')">奖章</button>
+</div>
+<div class="result" id="result"></div>
+<script>
+var API=window.location.origin;
+var currentTab='career';
+var lastNick='';
+var lastData=null;
+var lastAwards=null;
+
+document.getElementById('nickname').addEventListener('keydown',function(e){if(e.key==='Enter')doSearch()});
+
+var CN={
+  career:'生涯',skills:'技能',general:'综合',crimes:'犯罪',vehicles:'载具',cash:'收支',combat:'战斗',weapons:'武器',
+  'Overall income':'总收入','Overall expenses':'总花费','Total players killed':'击杀玩家','Total deaths by players':'被玩家击杀',
+  'Competitive Player Kill / Death ratio':'K/D','Time spent in GTA Online':'在线时长','Time spent in first person':'第一人称',
+  'Time spent in Deathmatches':'死斗时长','Time spent in Races':'竞速时长','Time spent in the Creator':'制作器',
+  'Time played as character':'角色使用时间','Character created':'角色创建时间','Last ranked up':'最后升级',
+  'Longest single game session':'最长单次游戏','Average time per session':'平均每局','Total deaths':'死亡总数',
+  'Cops killed':'击杀警察','NOOSE killed':'击杀国安局','Times Wanted':'被通缉次数',
+  'Wanted stars attained':'获得通缉星','Wanted stars evaded':'逃脱通缉星',
+  'Time spent with a Wanted Level':'被通缉时间','Time spent with a 5 star Wanted Level':'5星通缉时间',
+  'Longest Wanted Level duration':'最长通缉时间','Last Wanted Level duration':'上次通缉时间',
+  'Drive-by kills as driver':'驾车射击(车手)','Drive-by kills as passenger':'驾车射击(乘客)',
+  'Vehicular kills':'载具击杀','Cars stolen':'盗窃车辆','Motorcycles stolen':'盗窃摩托',
+  'Helicopters stolen':'盗窃直升机','Planes stolen':'盗窃飞机','Boats stolen':'盗窃船只',
+  'ATVs stolen':'盗窃沙滩车','Bicycles stolen':'盗窃自行车','Cop vehicles stolen':'盗窃警车','Store Hold Ups':'抢劫商店',
+  'Farthest free-fall survived':'最高坠落存活','Highest Survival wave reached':'最高生存波数',
+  'Bounties placed on you':'被悬赏数','Photos taken':'拍照数','Private dances':'艳舞','Sex acts purchased':'买春',
+  'Deaths by drowning':'溺水死亡','Deaths by explosion':'爆炸死亡','Deaths by falling':'坠落死亡',
+  'Deaths by fire':'火烧死亡','Deaths by traffic':'撞死',
+  'Time swimming':'游泳时间','Time underwater':'潜水时间','Time walking':'步行时间','Time in cover':'掩体时间',
+  'Distance traveled running':'跑步距离','Distance traveled swimming':'游泳距离','Distance traveled walking':'步行距离',
+  'Distance traveled in cars':'驾车距离','Distance traveled on motorcycles':'摩托距离',
+  'Distance traveled in helicopters':'直升机距离','Distance traveled in planes':'飞机距离',
+  'Distance traveled in boats':'船只距离','Distance traveled on ATVs':'沙滩车距离','Distance traveled on bicycles':'自行车距离',
+  'Time driving cars':'驾车时间','Time riding motorcycles':'摩托时间','Time flying helicopters':'直升机时间',
+  'Time flying planes':'飞机时间','Time sailing boats':'船只时间','Time riding ATVs':'沙滩车时间','Time riding bicycles':'自行车时间',
+  'Highest speed in a road vehicle':'最高速度','Road vehicle driven fastest':'最快载具',
+  'Farthest stoppie':'翘后轮最长距离','Farthest wheelie':'翘前轮最长距离',
+  'Farthest driven without crashing':'无碰撞最长距离','Farthest vehicle jump':'最远飞车',
+  'Highest vehicle jump':'最高飞车','Car crashes':'撞车次数','Motorcycle crashes':'摩托撞车','ATV crashes':'沙滩车撞车',
+  'Bailed from a moving vehicle':'跳离载具','Most flips in one vehicle jump':'最多翻转','Most spins in one vehicle jump':'最多旋转',
+  'Near misses':'擦肩而过','Vehicles repaired':'修车次数','Vehicles resprayed':'改色次数',
+  'Distance traveled':'总移动距离',
+  'Spent on weapons & armor':'武器护甲花费','Spent on vehicles & maintenance':'载具维护花费',
+  'Spent on style & entertainment':'风格娱乐花费','Spent on property & utilities':'房产公用花费',
+  'Spent on Job & Activity entry fees':'差事入场费','Spent on betting':'赌博花费',
+  'Spent on contact services':'联络人服务花费','Spent on healthcare':'医疗花费',
+  'Dropped or stolen':'丢失或被盗','Given to others':'给予他人',
+  'Earned from Jobs':'差事收入','Earned from selling vehicles':'出售载具收入',
+  'Earned from betting':'赌博收入','Earned from Good Sport reward':'良好表现奖励',
+  'Picked up':'拾取金额','Received from others':'他人给予',
+  'Shots':'开火次数','Hits':'击中次数','Accuracy':'精准度','Kills':'击杀数',
+  'Headshot kills':'爆头击杀数','Armed kills':'持枪击杀数','Free Aim kills':'自由瞄准击杀',
+  'Stealth kills':'潜行击杀数','Counter attacks':'反击次数','Player kills':'玩家击杀数',
+  'Player headshot kills':'玩家爆头击杀数','Survival kills':'生存战击杀数',
+  'Gang Attack kills':'帮派攻击击杀数','Highest killstreak in Deathmatch':'死斗最高连杀',
+  'Archenemy':'头号大敌','Times killed by Archenemy':'被头号大敌杀','Victim':'受害者','Victim kills':'受害者击杀',
+  'Stamina':'体力','Shooting':'射击','Strength':'力量','Stealth':'潜行','Flying':'飞行','Driving':'驾驶',
+  'Lung Capacity':'肺活量','Mental State':'精神状态'
+};
+
+// 奖章中文分类
+var AWARD_CAT_CN={
+  'Victory':'胜利','General':'通用','Crimes':'犯罪','Vehicles':'载具','Combat':'战斗','Heists':'抢劫',
+  'Rewards':'奖励','Arena War':'竞技场之战','After Hours':'夜总会','Doomsday':'末日',
+  'Diamond Casino':'钻石赌场','Diamond Casino Heist':'钻石赌场抢劫',
+  'Cayo Perico Heist':'佩里科岛抢劫','The Contract':'合约','Los Santos Tuners':'洛圣都车友会',
+  'Los Santos Drug Wars':'毒品战争','The Chop Shop':'废车场','Bottom Dollar Bounties':'最低赏金',
+  'Agents of Sabotage':'破坏行动','Cluckin Bell Farm Raid':'当当钟农场',
+  'Oscar Guzman Flies Again':'奥斯卡古兹曼','Los Santos Summer Special':'夏日特辑',
+  'Money Fronts':'金钱前哨','A Safehouse in the Hills':'山间安全屋'
+};
+
+var MEDAL_CN={Gold:'金',Silver:'银',Bronze:'铜',Platinum:'铂',tattoo:'纹身'};
+
+function es(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function cn(k){return CN[k]||k}
+
+function statCat(title,items){
+  if(!items||!Object.keys(items).length)return'';
+  var entries=Object.entries(items);
+  var rows=entries.map(function(e){return'<div class="row"><span class="label">'+es(cn(e[0]))+'</span><span class="value">'+es(e[1])+'</span></div>'}).join('');
+  return'<div class="category-section"><div class="cat-header"><span>'+cn(title)+'</span></div><div class="stat-grid">'+rows+'</div></div>';
+}
+
+function renderJudge(judgements){
+  if(!judgements||!judgements.length)return'';
+  var items=judgements.map(function(j){
+    var cls=j.level==='异常'?'j-anomaly':'j-suspect';
+    var prefix=j.level==='异常'?'!!':'?';
+    return'<div class="j-item '+cls+'">'+prefix+' ['+es(j.level)+'] '+es(j.message)+'</div>';
+  }).join('');
+  return'<div class="judge"><h3>异常检测 ('+judgements.length+'项)</h3>'+items+'</div>';
+}
+
+function renderCareer(data){
+  var b=data.body||{},p=b.profile||{},s=b.stats||{},cats=s.categories||{};
+  var ov=b.overview||{};
+  var html='';
+
+  // 基础资料
+  var crewTags=(p.crews||[]).map(function(c){return'<span class="tag">'+es(c.tag)+' '+es(c.name||'')+'</span>'}).join('');
+  var gameTags=(p.games||[]).map(function(g){return'<span class="tag">'+es(g.name)+'</span>'}).join('');
+  var linkedTags=(p.linked_accounts||[]).map(function(a){return'<span class="tag">'+es(a.service)+':'+es(a.user_name||a.user_id||'')+'</span>'}).join('');
+
+  html+='<div class="card"><h2>基础资料 <span style="font-weight:normal;color:#8899aa;font-size:.8em">'+(b.cached?'缓存':'实时')+' | '+(b.updated_at?new Date(b.updated_at*1000).toLocaleString():'')+'</span></h2>'+
+    '<div class="row"><span class="label">昵称</span><span class="value">'+es(p.nickname||'-')+'</span></div>'+
+    '<div class="row"><span class="label">RID</span><span class="value">'+(p.rockstar_id||'-')+'</span></div>'+
+    '<div class="row"><span class="label">所在地</span><span class="value">'+es(p.country_code||'-')+'</span></div>'+
+    '<div class="row"><span class="label">好友</span><span class="value">'+(p.friend_count||0)+'</span></div>'+
+    '<div class="row"><span class="label">帮会</span><span class="value">'+(crewTags||'无')+'</span></div>'+
+    '<div class="row"><span class="label">游戏</span><span class="value">'+(gameTags||'无')+'</span></div>'+
+    '<div class="row"><span class="label">绑定</span><span class="value">'+(linkedTags||'无')+'</span></div>'+
+    '</div>';
+
+  // 等级金钱
+  if(ov.rank||ov.cash||ov.bank){
+    html+='<div class="card" style="background:#1a2a1a;border:1px solid #2a4a2a">'+
+      '<h2>等级 & 金钱</h2>'+
+      (ov.rank?'<div class="row"><span class="label">等级</span><span class="value" style="font-size:1.5em;color:#ffcc00;font-weight:bold">'+es(ov.rank)+'</span></div>':'')+
+      (ov.rp?'<div class="row"><span class="label">RP</span><span class="value">'+es(ov.rp)+'</span></div>':'')+
+      (ov.cash?'<div class="row"><span class="label">现金</span><span class="value" style="color:#4caf50">'+es(ov.cash)+'</span></div>':'')+
+      (ov.bank?'<div class="row"><span class="label">银行存款</span><span class="value" style="color:#4caf50">'+es(ov.bank)+'</span></div>':'')+
+      (ov.play_time?'<div class="row"><span class="label">在线时长</span><span class="value">'+es(ov.play_time)+'</span></div>':'')+
+      (ov.crew_name?'<div class="row"><span class="label">帮会</span><span class="value">'+es(ov.crew_name)+'</span></div>':'')+
+      '</div>';
+  }
+
+  // 生涯统计
+  if(Object.keys(cats).length){
+    var total=0;
+    for(var c in cats)total+=Object.keys(cats[c]||{}).length;
+    html+='<div class="card"><h2>生涯统计 ('+total+' 项)</h2>';
+    var order=['career','cash','combat','general','crimes','vehicles','weapons','skills'];
+    for(var i=0;i<order.length;i++){
+      var cat=order[i],items=cats[cat];
+      if(items&&Object.keys(items).length)html+=statCat(cat,items);
+    }
+    html+='</div>';
+  }
+
+  // 异常检测
+  html+=renderJudge(b.judgements);
+
+  return html;
+}
+
+function renderAwards(data){
+  var b=data.body||{},awards=b.awards||{};
+  var items=awards._items||[];
+  var html='';
+
+  // 分类进度条
+  var catKeys=Object.keys(awards).filter(function(k){return k!=='_items'}).sort();
+  if(catKeys.length){
+    html+='<div class="card"><h2>奖章概览</h2>';
+    var totalDone=0,totalAll=0;
+    for(var i=0;i<catKeys.length;i++){
+      var cat=catKeys[i],arr=awards[cat]||[];
+      if(!arr.length)continue;
+      var d=arr[0][1],t=arr[0][2];
+      totalDone+=d;totalAll+=t;
+      var pct=t>0?Math.round(d/t*100):0;
+      var catCN=AWARD_CAT_CN[cat]||cat;
+      html+='<div class="cat-bar">'+
+        '<span class="name">'+catCN+'</span>'+
+        '<div class="bar-wrap"><div class="bar-fill" style="width:'+pct+'%"></div></div>'+
+        '<span class="num">'+d+'/'+t+'</span></div>';
+    }
+    html+='<div style="text-align:right;color:#8899aa;font-size:.85em;margin-top:8px">'+
+      '单项奖章: '+items.filter(function(x){return x[2]&&x[3]&&x[2]>=x[3]}).length+'/'+items.length+' 完成</div>';
+    html+='</div>';
+  }
+
+  // 全部分类单项
+  if(items.length){
+    html+='<div class="card"><h2>全部奖章 ('+items.length+')</h2>';
+    for(var i=0;i<catKeys.length;i++){
+      var cat=catKeys[i];
+      var catItems=items.filter(function(x){
+        // 根据名字匹配分类（简单处理：所有items都显示在一个大列表中按分类展开）
+        return true;
+      });
+    }
+    // 按分类分组显示
+    // 构建分类映射：通过 awards 的 items[0] 对应
+    var catItemsMap={};
+    // 简化：全部展开按行显示
+    var allHtml='';
+    for(var j=0;j<items.length;j++){
+      var it=items[j];
+      var n=it[0],m=it[1],d=it[2],t=it[3];
+      var medalCN=MEDAL_CN[m]||m;
+      var pct=t>1?Math.round((d||0)/t*100):(d>=t?100:0);
+      var doneCls=d>=t?'done':'';
+      var barHtml='';
+      if(t>1){
+        barHtml='<div class="a-bar"><div class="a-bar-fill '+doneCls+'" style="width:'+pct+'%"></div></div>';
+      }
+      allHtml+='<div class="award-item '+doneCls+'">'+
+        '<span class="a-medal">'+medalCN+'</span>'+
+        '<span class="a-name">'+es(n)+'</span>'+
+        barHtml+
+        '<span class="a-progress">'+(d||0)+'/'+(t||1)+'</span></div>';
+    }
+    html+='<div style="max-height:600px;overflow-y:auto">'+allHtml+'</div></div>';
+  }
+
+  // 异常检测
+  html+=renderJudge(b.judgements);
+
+  return html;
+}
+
+async function checkHealth(){
+  var el=document.getElementById('tokenStatus');
+  try{
+    var r=await fetch(API+'/health');var d=await r.json();
+    if(d.has_token&&d.refresh_ready){el.style.color='#4caf50';el.textContent='凭证正常'}
+    else if(d.has_token){el.style.color='#ff9800';el.textContent='凭证不完整'}
+    else{el.style.color='#e94560';el.textContent='未配置凭证'}
+  }catch(e){el.style.color='#e94560';el.textContent='服务离线'}
+}
+checkHealth();setInterval(checkHealth,120000);
+
+function switchTab(tab){
+  currentTab=tab;
+  document.getElementById('tabCareer').classList.toggle('active',tab==='career');
+  document.getElementById('tabAwards').classList.toggle('active',tab==='awards');
+  if(tab==='career'&&lastData)document.getElementById('result').innerHTML=renderCareer(lastData);
+  if(tab==='awards'&&lastAwards)document.getElementById('result').innerHTML=renderAwards(lastAwards);
+  if(tab==='awards'&&!lastAwards&&lastNick)loadAwards(lastNick);
+}
+
+async function loadAwards(nick){
+  document.getElementById('result').innerHTML='<div class="loading">加载奖章…</div>';
+  try{
+    var r=await fetch(API+'/api/player/awards?nickname='+encodeURIComponent(nick));
+    var d=await r.json();
+    if(d.code===200){lastAwards=d;document.getElementById('result').innerHTML=renderAwards(d)}
+    else document.getElementById('result').innerHTML='<div class="error">奖章查询失败: '+es(d.message)+'</div>';
+  }catch(e){document.getElementById('result').innerHTML='<div class="error">网络错误: '+es(e.message)+'</div>'}
+}
+
+async function doSearch(force){
+  var nick=document.getElementById('nickname').value.trim();
+  if(!nick)return;
+  lastNick=nick;lastAwards=null;
+  var btn=document.getElementById('btn'),res=document.getElementById('result');
+  btn.disabled=true;
+  res.innerHTML='<div class="loading">查询中…</div>';
+  try{
+    var url=API+'/api/player?nickname='+encodeURIComponent(nick);
+    if(force)url+='&force=true';
+    var r=await fetch(url),d=await r.json();
+    if(d.code===200){
+      lastData=d;
+      if(currentTab==='career')res.innerHTML=renderCareer(d);
+      else loadAwards(nick);
+    }else if(d.code===404)res.innerHTML='<div class="card"><p class="empty">玩家不存在</p></div>';
+    else res.innerHTML='<div class="error">查询失败: '+es(d.message)+'</div>';
+  }catch(e){res.innerHTML='<div class="error">网络错误: '+es(e.message)+'</div>'}
+  btn.disabled=false;
+}
+</script>
+</body>
+</html>

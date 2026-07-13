@@ -1,0 +1,15 @@
+# --- Web / API ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.8
+pydantic-settings>=2.2
+
+# --- 采集 / 解析 ---
+httpx>=0.27
+beautifulsoup4>=4.12
+
+# --- 调度 ---
+apscheduler>=3.10
+
+# --- 测试 ---
+pytest>=8.0
